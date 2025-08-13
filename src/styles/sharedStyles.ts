@@ -120,29 +120,7 @@ export const sharedStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   
-  // Spacing
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 16,
-    lg: 20,
-    xl: 24,
-  },
-  
-  // Colors
-  colors: {
-    primary: '#007AFF',
-    secondary: '#8E8E93',
-    success: '#34C759',
-    warning: '#FF9500',
-    danger: '#FF3B30',
-    background: '#f5f5f5',
-    surface: '#fff',
-    text: '#333',
-    textSecondary: '#666',
-    border: '#e0e0e0',
-  },
-  
+ 
   // Modal
   modalOverlay: {
     flex: 1,

@@ -10,7 +10,6 @@ import CustomDrawerContent from "./CustomDrawerContent";
 
 export type DrawerParamList = {
   Projects: undefined;
-  Tasks: undefined;
   Profile: undefined;
   Admin: undefined;
 };
@@ -49,16 +48,6 @@ export default function DrawerNavigator() {
         }}
       />
       
-      <Drawer.Screen 
-        name="Tasks" 
-        component={TasksScreen}
-        options={{
-          drawerLabel: "All Tasks",
-          drawerIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}>✅</Text>
-          ),
-        }}
-      />
       
       <Drawer.Screen 
         name="Profile" 
