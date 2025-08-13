@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   ScrollView
 } from "react-native";
+import { Picker } from '@react-native-picker/picker';
 import { useAuth } from "../contexts/AuthContext";
 import { FirebaseService, ProjectData, TaskData, UserData } from "../services/firebaseService";
 import { useFocusEffect } from '@react-navigation/native';
@@ -260,6 +261,23 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
             <Text style={styles.taskValue}>{item.notes}</Text>
           </View>
         )}
+        
+        {/* Status Picker Row */}
+        <View style={styles.taskRow}>
+          <Text style={styles.taskLabel}>Status:</Text>
+          <View style={styles.statusPickerContainer}>
+            <Picker
+              selectedValue={item.status}
+              style={styles.statusPicker}
+              onValueChange={(value) => handleStatusChange(item.id, value)}
+              mode="dropdown"
+            >
+              <Picker.Item label="Pending" value="pending" />
+              <Picker.Item label="In Progress" value="in_progress" />
+              <Picker.Item label="Completed" value="completed" />
+            </Picker>
+          </View>
+        </View>
       </View>
       
       <View style={styles.taskActions}>
@@ -268,20 +286,6 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
           onPress={() => handleEditTask(item)}
         >
           <Text style={styles.actionButtonText}>Edit</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.statusButton]}
-          onPress={() => {
-            const nextStatus = getNextStatus(item.status);
-            if (nextStatus) {
-              handleStatusChange(item.id, nextStatus);
-            }
-          }}
-        >
-          <Text style={styles.actionButtonText}>
-            {getNextStatusText(item.status)}
-          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity
@@ -787,5 +791,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  statusPickerContainer: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    minWidth: 120,
+  },
+  statusPicker: {
+    height: 40,
+    width: '100%',
   },
 });
