@@ -4,28 +4,15 @@ import { useAuth } from "../contexts/AuthContext";
 import { FirebaseService, UserData } from "../services/firebaseService";
 
 export default function AdminScreen({ navigation }: any) {
-  const { currentUser } = useAuth();
+  const { currentUser, userData, isAdmin } = useAuth();
   const [users, setUsers] = useState<(UserData & { id: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<UserData | null>(null);
 
   useEffect(() => {
-    if (currentUser) {
-      loadUserData();
+    if (currentUser && isAdmin) {
       loadUsers();
     }
-  }, [currentUser]);
-
-  const loadUserData = async () => {
-    if (currentUser) {
-      try {
-        const data = await FirebaseService.getUserData(currentUser.uid);
-        setUserData(data);
-      } catch (error) {
-        console.error('Error loading user data:', error);
-      }
-    }
-  };
+  }, [currentUser, isAdmin]);
 
   const loadUsers = async () => {
     try {
@@ -39,8 +26,6 @@ export default function AdminScreen({ navigation }: any) {
       setLoading(false);
     }
   };
-
-  const isAdmin = userData?.role === 'admin';
 
   const handleUpdateUserRole = async (userId: string, newRole: string) => {
     try {

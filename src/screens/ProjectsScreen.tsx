@@ -24,10 +24,9 @@ interface Project {
 }
 
 export default function ProjectsScreen({ navigation }: any) {
-  const { currentUser } = useAuth();
+  const { currentUser, userData, isAdmin } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<UserData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [formData, setFormData] = useState({
@@ -38,21 +37,7 @@ export default function ProjectsScreen({ navigation }: any) {
 
   useEffect(() => {
     loadProjects();
-    if (currentUser) {
-      loadUserData();
-    }
   }, [currentUser]);
-
-  const loadUserData = async () => {
-    if (currentUser) {
-      try {
-        const data = await FirebaseService.getUserData(currentUser.uid);
-        setUserData(data);
-      } catch (error) {
-        console.error('Error loading user data:', error);
-      }
-    }
-  };
 
   const loadProjects = async () => {
     try {
@@ -66,8 +51,6 @@ export default function ProjectsScreen({ navigation }: any) {
       setLoading(false);
     }
   };
-
-  const isAdmin = userData?.role === 'admin';
 
   const handleCreateProject = () => {
     setEditingProject(null);

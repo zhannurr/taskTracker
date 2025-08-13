@@ -22,13 +22,12 @@ interface ProjectDetailScreenProps {
 }
 
 export default function ProjectDetailScreen({ route, navigation }: ProjectDetailScreenProps) {
-  const { currentUser } = useAuth();
+  const { currentUser, userData, isAdmin, refreshUserData, forceRefreshUserData } = useAuth();
   const { projectId } = route.params;
   
   const [project, setProject] = useState<(ProjectData & { id: string }) | null>(null);
   const [tasks, setTasks] = useState<(TaskData & { id: string; creatorEmail?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<UserData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTask, setEditingTask] = useState<(TaskData & { id: string }) | null>(null);
   const [formData, setFormData] = useState({
@@ -41,9 +40,6 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
     if (projectId) {
       loadProject();
       loadTasks();
-      if (currentUser) {
-        loadUserData();
-      }
       // Initialize tasks collection to ensure it exists
       FirebaseService.initializeTasksCollection().catch(error => {
         console.log('Error initializing tasks collection:', error);
@@ -60,17 +56,6 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
     }, [projectId])
   );
 
-  const loadUserData = async () => {
-    if (currentUser) {
-      try {
-        const data = await FirebaseService.getUserData(currentUser.uid);
-        setUserData(data);
-      } catch (error) {
-        console.error('Error loading user data:', error);
-      }
-    }
-  };
-
   const loadProject = async () => {
     try {
       const projectData = await FirebaseService.getProject(projectId);
@@ -84,28 +69,52 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const loadTasks = async () => {
     try {
       setLoading(true);
+      console.log('=== Starting loadTasks ===');
+      console.log('Current user:', currentUser?.uid);
+      console.log('Is admin:', isAdmin);
+      console.log('Project ID:', projectId);
+      
       let tasksData: (TaskData & { id: string; creatorEmail?: string })[] = [];
       
       if (isAdmin) {
         // Admin users can see all tasks
-        tasksData = await FirebaseService.getProjectTasksWithUsers(projectId);
+        console.log('Loading all tasks for admin user');
+        try {
+          tasksData = await FirebaseService.getProjectTasksWithUsers(projectId);
+          console.log('Admin tasks loaded successfully:', tasksData.length);
+        } catch (adminError) {
+          console.error('Error loading admin tasks:', adminError);
+          Alert.alert('Admin Error', `Failed to load admin tasks: ${adminError}`);
+          return;
+        }
       } else {
         // Regular users can only see their own tasks
         if (currentUser?.uid) {
-          tasksData = await FirebaseService.getUserProjectTasksWithUsers(projectId, currentUser.uid);
+          console.log('Loading user tasks for regular user:', currentUser.uid);
+          try {
+            tasksData = await FirebaseService.getUserProjectTasksWithUsers(projectId, currentUser.uid);
+            console.log('User tasks loaded successfully:', tasksData.length);
+          } catch (userError) {
+            console.error('Error loading user tasks:', userError);
+            Alert.alert('User Error', `Failed to load user tasks: ${userError}`);
+            return;
+          }
+        } else {
+          console.log('No current user, cannot load tasks');
         }
       }
       
+      console.log('Final tasks data:', tasksData.length, 'isAdmin:', isAdmin);
       setTasks(tasksData);
     } catch (error) {
-      console.error('Error loading tasks:', error);
-      Alert.alert('Error', 'Failed to load tasks');
+      console.error('Error in loadTasks:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      Alert.alert('Error', `Failed to load tasks: ${errorMessage}`);
     } finally {
       setLoading(false);
+      console.log('=== loadTasks completed ===');
     }
   };
-
-  const isAdmin = userData?.role === 'admin';
 
   const handleAddTask = () => {
     setEditingTask(null);
@@ -423,6 +432,46 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Debug Information */}
+        <View style={styles.debugCard}>
+          <Text style={styles.debugTitle}>Debug Info</Text>
+          <Text style={styles.debugText}>User ID: {currentUser?.uid || 'None'}</Text>
+          <Text style={styles.debugText}>User Role: {userData?.role || 'None'}</Text>
+          <Text style={styles.debugText}>Is Admin: {isAdmin ? 'Yes' : 'No'}</Text>
+          <Text style={styles.debugText}>Project ID: {projectId}</Text>
+          <Text style={styles.debugText}>Tasks Count: {tasks.length}</Text>
+          
+          <TouchableOpacity 
+            style={styles.testButton}
+            onPress={() => {
+              FirebaseService.testTasksCollectionAccess();
+            }}
+          >
+            <Text style={styles.testButtonText}>Test Tasks Access</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.testButton, { backgroundColor: '#FF9500', marginTop: 10 }]}
+            onPress={async () => {
+              console.log('Manual refresh of user data...');
+              await refreshUserData();
+            }}
+          >
+            <Text style={styles.testButtonText}>Refresh User Data</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.testButton, { backgroundColor: '#FF3B30', marginTop: 10 }]}
+            onPress={() => {
+              if (currentUser?.uid) {
+                FirebaseService.debugUserDocument(currentUser.uid);
+              }
+            }}
+          >
+            <Text style={styles.testButtonText}>Debug User Document</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Project Info */}
         <View style={styles.projectCard}>
           <Text style={styles.projectTitle}>{project.title}</Text>
@@ -603,6 +652,28 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  debugCard: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  debugTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  debugText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 8,
   },
   projectCard: {
     backgroundColor: '#fff',
@@ -880,5 +951,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 15,
     textAlign: 'center',
+  },
+  testButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginTop: 15,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

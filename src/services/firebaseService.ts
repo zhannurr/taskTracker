@@ -54,11 +54,16 @@ export class FirebaseService {
   // User Authentication
   static async registerUser(email: string, password: string): Promise<UserCredential> {
     try {
+      console.log('=== Starting user registration ===');
+      console.log('Email:', email);
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('User created with UID:', userCredential.user.uid);
       
       // Check if this is the first user (make them admin)
       const usersQuery = await getDocs(collection(db, "users"));
       const isFirstUser = usersQuery.empty;
+      console.log('Is first user?', isFirstUser);
       
       // Store additional user data in Firestore
       const userData: UserData = {
@@ -68,7 +73,20 @@ export class FirebaseService {
         createdAt: Timestamp.fromDate(new Date())
       };
       
-      await setDoc(doc(db, "users", userCredential.user.uid), userData);
+      console.log('User data to store:', userData);
+      
+      const userDocRef = doc(db, "users", userCredential.user.uid);
+      console.log('User document reference:', userDocRef.path);
+      
+      await setDoc(userDocRef, userData);
+      console.log('User document stored successfully');
+      
+      // Verify the document was created
+      const verifyDoc = await getDoc(userDocRef);
+      console.log('Verification - document exists:', verifyDoc.exists());
+      if (verifyDoc.exists()) {
+        console.log('Verification - document data:', verifyDoc.data());
+      }
       
       return userCredential;
     } catch (error) {
@@ -107,10 +125,15 @@ export class FirebaseService {
   // User Data Management
   static async getUserData(userId: string): Promise<UserData | null> {
     try {
+      console.log('getUserData called for userId:', userId);
       const userDoc = await getDoc(doc(db, "users", userId));
+      console.log('User document exists:', userDoc.exists());
       if (userDoc.exists()) {
-        return userDoc.data() as UserData;
+        const userData = userDoc.data() as UserData;
+        console.log('User data retrieved:', userData);
+        return userData;
       }
+      console.log('User document does not exist');
       return null;
     } catch (error) {
       console.error("Error getting user data:", error);
@@ -121,8 +144,12 @@ export class FirebaseService {
   // Check if a user is an admin
   static async isUserAdmin(userId: string): Promise<boolean> {
     try {
+      console.log('Checking if user is admin:', userId);
       const userData = await this.getUserData(userId);
-      return userData?.role === 'admin';
+      console.log('User data retrieved:', userData);
+      const isAdmin = userData?.role === 'admin';
+      console.log('Is user admin?', isAdmin);
+      return isAdmin;
     } catch (error) {
       console.error("Error checking if user is admin:", error);
       return false;
@@ -364,9 +391,12 @@ export class FirebaseService {
 
   static async getProjectTasks(projectId: string, userId?: string): Promise<(TaskData & { id: string })[]> {
     try {
+      console.log('getProjectTasks called with projectId:', projectId, 'userId:', userId);
+      
       let q;
       if (userId) {
         // Filter tasks by project and user
+        console.log('Filtering tasks by project and user');
         q = query(
           collection(db, "tasks"), 
           where("projectId", "==", projectId),
@@ -374,24 +404,32 @@ export class FirebaseService {
         );
       } else {
         // Get all tasks for the project (for admin users)
+        console.log('Getting all tasks for project (admin view)');
         q = query(
           collection(db, "tasks"), 
           where("projectId", "==", projectId)
         );
       }
       
+      console.log('Executing query...');
       const querySnapshot = await getDocs(q);
+      console.log('Query result:', querySnapshot.size, 'documents');
+      
       const tasks: (TaskData & { id: string })[] = [];
       
       querySnapshot.forEach((doc) => {
+        const taskData = doc.data();
+        console.log('Task data:', doc.id, taskData);
         tasks.push({
           id: doc.id,
-          ...doc.data()
+          ...taskData
         } as TaskData & { id: string });
       });
       
       // Sort by creation date (newest first) in JavaScript
-      return tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+      const sortedTasks = tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+      console.log('Returning sorted tasks:', sortedTasks.length);
+      return sortedTasks;
     } catch (error) {
       console.error("Error getting project tasks:", error);
       throw error;
@@ -505,13 +543,17 @@ export class FirebaseService {
   // Get tasks with user information
   static async getProjectTasksWithUsers(projectId: string, userId?: string): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
     try {
+      console.log('getProjectTasksWithUsers called with projectId:', projectId, 'userId:', userId);
+      
       const tasks = await this.getProjectTasks(projectId, userId);
+      console.log('Raw tasks from getProjectTasks:', tasks.length);
       
       // Get user emails for each task
       const tasksWithUsers = await Promise.all(
         tasks.map(async (task) => {
           try {
             const userData = await this.getUserData(task.createdBy);
+            console.log('User data for task creator:', task.createdBy, ':', userData?.email);
             return {
               ...task,
               creatorEmail: userData?.email || 'Unknown User'
@@ -526,6 +568,7 @@ export class FirebaseService {
         })
       );
       
+      console.log('Final tasks with users:', tasksWithUsers.length);
       return tasksWithUsers;
     } catch (error) {
       console.error("Error getting project tasks with users:", error);
@@ -613,6 +656,71 @@ export class FirebaseService {
     } catch (error) {
       console.error("Error checking project access:", error);
       return false;
+    }
+  }
+
+  // Test method to check tasks collection access
+  static async testTasksCollectionAccess(): Promise<void> {
+    try {
+      console.log('Testing tasks collection access...');
+      
+      // Try to get all tasks
+      const allTasks = await this.getAllTasks();
+      console.log('All tasks in collection:', allTasks.length);
+      
+      // Try to get tasks for a specific project
+      const projects = await this.getAllProjects();
+      if (projects.length > 0) {
+        const firstProject = projects[0];
+        console.log('Testing with first project:', firstProject.id);
+        
+        const projectTasks = await this.getProjectTasks(firstProject.id);
+        console.log('Tasks for first project:', projectTasks.length);
+        
+        const projectTasksWithUsers = await this.getProjectTasksWithUsers(firstProject.id);
+        console.log('Tasks with users for first project:', projectTasksWithUsers.length);
+      }
+      
+      console.log('Tasks collection access test completed successfully');
+    } catch (error) {
+      console.error('Error testing tasks collection access:', error);
+    }
+  }
+
+  // Debug method to check user document directly
+  static async debugUserDocument(userId: string): Promise<void> {
+    try {
+      console.log('=== Debugging user document ===');
+      console.log('User ID:', userId);
+      
+      const userDocRef = doc(db, "users", userId);
+      console.log('User document reference:', userDocRef.path);
+      
+      const userDoc = await getDoc(userDocRef);
+      console.log('Document exists:', userDoc.exists());
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        console.log('Document data:', data);
+        console.log('Document ID:', userDoc.id);
+        console.log('User role:', data.role);
+        console.log('User email:', data.email);
+        console.log('Created at:', data.createdAt);
+      } else {
+        console.log('Document does not exist');
+        
+        // Check if the users collection exists
+        const usersCollection = collection(db, "users");
+        const usersQuery = query(usersCollection, limit(5));
+        const usersSnapshot = await getDocs(usersQuery);
+        console.log('Users collection has documents:', usersSnapshot.size);
+        
+        usersSnapshot.forEach((doc) => {
+          console.log('User doc:', doc.id, doc.data());
+        });
+      }
+    } catch (error) {
+      console.error('Error debugging user document:', error);
     }
   }
 }
