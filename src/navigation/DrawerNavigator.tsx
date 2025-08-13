@@ -1,13 +1,16 @@
 import React from "react";
 import { createDrawerNavigator } from "@react-navigation/drawer";
+import { Text } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
 import ProjectsScreen from "../screens/ProjectsScreen";
+import TasksScreen from "../screens/TasksScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import AdminScreen from "../screens/AdminScreen";
 import CustomDrawerContent from "./CustomDrawerContent";
 
 export type DrawerParamList = {
   Projects: undefined;
+  Tasks: undefined;
   Profile: undefined;
   Admin: undefined;
 };
@@ -47,6 +50,17 @@ export default function DrawerNavigator() {
       />
       
       <Drawer.Screen 
+        name="Tasks" 
+        component={TasksScreen}
+        options={{
+          drawerLabel: "All Tasks",
+          drawerIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>✅</Text>
+          ),
+        }}
+      />
+      
+      <Drawer.Screen 
         name="Profile" 
         component={ProfileScreen}
         options={{
@@ -72,6 +86,3 @@ export default function DrawerNavigator() {
     </Drawer.Navigator>
   );
 }
-
-// Temporary Text component for drawer icons
-const Text = ({ children, style }: any) => <span style={style}>{children}</span>;

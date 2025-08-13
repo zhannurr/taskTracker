@@ -17,7 +17,8 @@ import {
   updateDoc,
   Timestamp,
   deleteDoc,
-  orderBy
+  orderBy,
+  limit
 } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
 
@@ -64,7 +65,7 @@ export class FirebaseService {
         email,
         password, // Note: In production, you might want to store additional user info instead of password
         role: isFirstUser ? "admin" : "user", // First user becomes admin
-        createdAt: new Timestamp(new Date().getTime() / 1000, 0)
+        createdAt: Timestamp.fromDate(new Date())
       };
       
       await setDoc(doc(db, "users", userCredential.user.uid), userData);
@@ -83,7 +84,7 @@ export class FirebaseService {
       // Update last login time
       if (userCredential.user) {
         await updateDoc(doc(db, "users", userCredential.user.uid), {
-          lastLogin: new Timestamp(new Date().getTime() / 1000, 0) // Convert Date to Timestamp
+          lastLogin: Timestamp.fromDate(new Date())
         });
       }
       
@@ -185,7 +186,7 @@ export class FirebaseService {
     try {
       // Note: In a real app, you might want to also delete the user's auth account
       // This requires Cloud Functions or admin SDK
-      await setDoc(doc(db, "users", userId), { deleted: true, deletedAt: new Timestamp(new Date().getTime() / 1000, 0) });
+      await setDoc(doc(db, "users", userId), { deleted: true, deletedAt: Timestamp.fromDate(new Date()) });
     } catch (error) {
       console.error("Error deleting user:", error);
       throw error;
@@ -197,8 +198,8 @@ export class FirebaseService {
     try {
       const projectWithTimestamp: ProjectData = {
         ...projectData,
-        createdAt: new Timestamp(new Date().getTime() / 1000, 0),
-        updatedAt: new Timestamp(new Date().getTime() / 1000, 0)
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date())
       };
       
       const docRef = await addDoc(collection(db, "projects"), projectWithTimestamp);
@@ -269,17 +270,78 @@ export class FirebaseService {
   }
 
   // Task Management Methods
-  static async createTask(taskData: Omit<TaskData, 'createdAt'>): Promise<string> {
+  static async initializeTasksCollection(): Promise<void> {
     try {
-      const taskWithTimestamp: TaskData = {
-        ...taskData,
-        createdAt: new Timestamp(new Date().getTime() / 1000, 0)
+      console.log('Initializing tasks collection...');
+      
+      // Try to get one document to see if collection exists
+      const tasksCollection = collection(db, "tasks");
+      const sampleQuery = query(tasksCollection, limit(1));
+      await getDocs(sampleQuery);
+      
+      console.log('Tasks collection already exists');
+    } catch (error) {
+      console.log('Tasks collection might not exist, creating sample task...');
+      
+      // Create a sample task to initialize the collection
+      const tasksCollection = collection(db, "tasks");
+      const sampleTask: TaskData = {
+        description: "Sample Task",
+        duration: 30,
+        status: 'pending',
+        projectId: "sample-project",
+        createdBy: "system",
+        createdAt: Timestamp.fromDate(new Date()),
+        notes: "This is a sample task to initialize the collection"
       };
       
-      const docRef = await addDoc(collection(db, "tasks"), taskWithTimestamp);
+      try {
+        await addDoc(tasksCollection, sampleTask);
+        console.log('Tasks collection initialized with sample task');
+        
+        // Delete the sample task after a short delay
+        setTimeout(async () => {
+          try {
+            const querySnapshot = await getDocs(query(tasksCollection, where("description", "==", "Sample Task")));
+            querySnapshot.forEach(async (doc) => {
+              await deleteDoc(doc.ref);
+            });
+            console.log('Sample task cleaned up');
+          } catch (cleanupError) {
+            console.log('Error cleaning up sample task:', cleanupError);
+          }
+        }, 5000);
+      } catch (initError) {
+        console.error('Error initializing tasks collection:', initError);
+      }
+    }
+  }
+
+  static async createTask(taskData: Omit<TaskData, 'createdAt'>): Promise<string> {
+    try {
+      console.log('Creating task with data:', taskData);
+      
+      // Validate required fields
+      if (!taskData.description || !taskData.duration || !taskData.projectId || !taskData.createdBy) {
+        throw new Error('Missing required fields: description, duration, projectId, or createdBy');
+      }
+      
+      const taskWithTimestamp: TaskData = {
+        ...taskData,
+        createdAt: Timestamp.fromDate(new Date())
+      };
+      
+      console.log('Task with timestamp:', taskWithTimestamp);
+      
+      // Create the tasks collection if it doesn't exist
+      const tasksCollection = collection(db, "tasks");
+      const docRef = await addDoc(tasksCollection, taskWithTimestamp);
+      
+      console.log('Task created successfully with ID:', docRef.id);
       return docRef.id;
     } catch (error) {
       console.error("Error creating task:", error);
+      console.error("Task data that failed:", taskData);
       throw error;
     }
   }
@@ -288,8 +350,8 @@ export class FirebaseService {
     try {
       const q = query(
         collection(db, "tasks"), 
-        where("projectId", "==", projectId),
-        orderBy("createdAt", "desc")
+        where("projectId", "==", projectId)
+        // Removed orderBy to avoid index requirement
       );
       const querySnapshot = await getDocs(q);
       const tasks: (TaskData & { id: string })[] = [];
@@ -301,7 +363,8 @@ export class FirebaseService {
         } as TaskData & { id: string });
       });
       
-      return tasks;
+      // Sort by creation date (newest first) in JavaScript
+      return tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
     } catch (error) {
       console.error("Error getting project tasks:", error);
       throw error;
@@ -314,7 +377,7 @@ export class FirebaseService {
       
       // If marking as completed, add completion timestamp
       if (data.status === 'completed' && !data.completedAt) {
-        updateData.completedAt = new Timestamp(new Date().getTime() / 1000, 0);
+        updateData.completedAt = Timestamp.fromDate(new Date());
       }
       
       await updateDoc(doc(db, "tasks", taskId), updateData);
@@ -349,6 +412,37 @@ export class FirebaseService {
       return tasks;
     } catch (error) {
       console.error("Error getting all tasks:", error);
+      throw error;
+    }
+  }
+
+  // Get tasks with user information
+  static async getProjectTasksWithUsers(projectId: string): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
+    try {
+      const tasks = await this.getProjectTasks(projectId);
+      
+      // Get user emails for each task
+      const tasksWithUsers = await Promise.all(
+        tasks.map(async (task) => {
+          try {
+            const userData = await this.getUserData(task.createdBy);
+            return {
+              ...task,
+              creatorEmail: userData?.email || 'Unknown User'
+            };
+          } catch (error) {
+            console.error(`Error getting user data for ${task.createdBy}:`, error);
+            return {
+              ...task,
+              creatorEmail: 'Unknown User'
+            };
+          }
+        })
+      );
+      
+      return tasksWithUsers;
+    } catch (error) {
+      console.error("Error getting project tasks with users:", error);
       throw error;
     }
   }

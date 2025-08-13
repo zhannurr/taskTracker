@@ -156,31 +156,45 @@ export default function ProjectsScreen({ navigation }: any) {
         Created: {item.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
       </Text>
       
-      {isAdmin && (
-        <View style={styles.adminActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleEditProject(item);
-            }}
-          >
-            <Text style={styles.actionButtonText}>Edit</Text>
-          </TouchableOpacity>
-          
-          <View style={styles.buttonSpacer} />
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleDeleteProject(item.id);
-            }}
-          >
-            <Text style={styles.actionButtonText}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={styles.projectActions}>
+        <TouchableOpacity
+          style={[styles.actionButton, styles.addTaskButton]}
+          onPress={(e) => {
+            e.stopPropagation();
+            navigation.navigate('ProjectDetail', { projectId: item.id });
+          }}
+        >
+          <Text style={styles.actionButtonText}>+ Task</Text>
+        </TouchableOpacity>
+        
+        {isAdmin && (
+          <>
+            <View style={styles.buttonSpacer} />
+            
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleEditProject(item);
+              }}
+            >
+              <Text style={styles.actionButtonText}>Edit</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.buttonSpacer} />
+            
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDeleteProject(item.id);
+              }}
+            >
+              <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
@@ -377,7 +391,7 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 16,
   },
-  adminActions: {
+  projectActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
   },
@@ -391,6 +405,9 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: '#FF3B30',
+  },
+  addTaskButton: {
+    backgroundColor: '#4CAF50', // A different color for the add task button
   },
   actionButtonText: {
     color: '#fff',

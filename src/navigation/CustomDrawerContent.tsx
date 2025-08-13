@@ -99,12 +99,28 @@ export default function CustomDrawerContent({ navigation, state }: CustomDrawerC
               styles.drawerItem,
               state.index === 1 && styles.activeDrawerItem
             ]}
+            onPress={() => navigation.navigate("Tasks")}
+          >
+            <Text style={styles.drawerIcon}>✅</Text>
+            <Text style={[
+              styles.drawerLabel,
+              state.index === 1 && styles.activeDrawerLabel
+            ]}>
+              All Tasks
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.drawerItem,
+              state.index === 2 && styles.activeDrawerItem
+            ]}
             onPress={() => navigation.navigate("Profile")}
           >
             <Text style={styles.drawerIcon}>👤</Text>
             <Text style={[
               styles.drawerLabel,
-              state.index === 1 && styles.activeDrawerLabel
+              state.index === 2 && styles.activeDrawerLabel
             ]}>
               Profile
             </Text>
@@ -114,14 +130,14 @@ export default function CustomDrawerContent({ navigation, state }: CustomDrawerC
             <TouchableOpacity
               style={[
                 styles.drawerItem,
-                state.index === 2 && styles.activeDrawerItem
+                state.index === 3 && styles.activeDrawerItem
               ]}
               onPress={() => navigation.navigate("Admin")}
             >
               <Text style={styles.drawerIcon}>⚙️</Text>
               <Text style={[
                 styles.drawerLabel,
-                state.index === 2 && styles.activeDrawerLabel
+                state.index === 3 && styles.activeDrawerLabel
               ]}>
                 Admin Panel
               </Text>

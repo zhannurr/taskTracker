@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
 import { FirebaseService, ProjectData, TaskData, UserData } from "../services/firebaseService";
+import { useFocusEffect } from '@react-navigation/native';
 
 interface ProjectDetailScreenProps {
   route: any;
@@ -24,7 +25,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const { projectId } = route.params;
   
   const [project, setProject] = useState<(ProjectData & { id: string }) | null>(null);
-  const [tasks, setTasks] = useState<(TaskData & { id: string })[]>([]);
+  const [tasks, setTasks] = useState<(TaskData & { id: string; creatorEmail?: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -42,8 +43,21 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       if (currentUser) {
         loadUserData();
       }
+      // Initialize tasks collection to ensure it exists
+      FirebaseService.initializeTasksCollection().catch(error => {
+        console.log('Error initializing tasks collection:', error);
+      });
     }
   }, [projectId, currentUser]);
+
+  // Refresh tasks when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (projectId) {
+        loadTasks();
+      }
+    }, [projectId])
+  );
 
   const loadUserData = async () => {
     if (currentUser) {
@@ -69,7 +83,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const loadTasks = async () => {
     try {
       setLoading(true);
-      const tasksData = await FirebaseService.getProjectTasks(projectId);
+      const tasksData = await FirebaseService.getProjectTasksWithUsers(projectId);
       setTasks(tasksData);
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -98,6 +112,10 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   };
 
   const handleSaveTask = async () => {
+    console.log('handleSaveTask called with formData:', formData);
+    console.log('currentUser:', currentUser?.uid);
+    console.log('projectId:', projectId);
+    
     if (!formData.description.trim() || !formData.duration.trim()) {
       Alert.alert('Error', 'Please fill description and duration');
       return;
@@ -109,8 +127,19 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       return;
     }
 
+    if (!projectId) {
+      Alert.alert('Error', 'Project ID is missing');
+      return;
+    }
+
+    if (!currentUser?.uid) {
+      Alert.alert('Error', 'User not authenticated');
+      return;
+    }
+
     try {
       if (editingTask) {
+        console.log('Updating existing task:', editingTask.id);
         await FirebaseService.updateTask(editingTask.id, {
           description: formData.description.trim(),
           duration,
@@ -118,22 +147,31 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         });
         Alert.alert('Success', 'Task updated successfully');
       } else {
-        await FirebaseService.createTask({
+        console.log('Creating new task');
+        const taskData = {
           description: formData.description.trim(),
           duration,
           notes: formData.notes.trim() || undefined,
-          status: 'pending',
+          status: 'pending' as const,
           projectId,
-          createdBy: currentUser?.uid || ''
-        });
+          createdBy: currentUser.uid
+        };
+        console.log('Task data to create:', taskData);
+        
+        const taskId = await FirebaseService.createTask(taskData);
+        console.log('Task created with ID:', taskId);
         Alert.alert('Success', 'Task created successfully');
       }
       
       setModalVisible(false);
-      loadTasks();
+      // Clear form data
+      setFormData({ description: '', duration: '', notes: '' });
+      // Refresh tasks list
+      await loadTasks();
     } catch (error) {
       console.error('Error saving task:', error);
-      Alert.alert('Error', 'Failed to save task');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      Alert.alert('Error', `Failed to save task: ${errorMessage}`);
     }
   };
 
@@ -150,7 +188,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
             try {
               await FirebaseService.deleteTask(taskId);
               Alert.alert('Success', 'Task deleted successfully');
-              loadTasks();
+              await loadTasks(); // Refresh the list
             } catch (error) {
               console.error('Error deleting task:', error);
               Alert.alert('Error', 'Failed to delete task');
@@ -164,14 +202,23 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const handleStatusChange = async (taskId: string, newStatus: TaskData['status']) => {
     try {
       await FirebaseService.updateTask(taskId, { status: newStatus });
-      loadTasks();
+      // Update local state immediately for better UX
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.id === taskId 
+            ? { ...task, status: newStatus }
+            : task
+        )
+      );
+      // Then refresh to get the latest data
+      await loadTasks();
     } catch (error) {
       console.error('Error updating task status:', error);
       Alert.alert('Error', 'Failed to update task status');
     }
   };
 
-  const renderTaskItem = ({ item }: { item: TaskData & { id: string } }) => (
+  const renderTaskItem = ({ item }: { item: TaskData & { id: string; creatorEmail?: string } }) => (
     <View style={styles.taskCard}>
       <View style={styles.taskHeader}>
         <Text style={styles.taskDescription}>{item.description}</Text>
@@ -181,19 +228,37 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       </View>
       
       <View style={styles.taskDetails}>
-        <Text style={styles.taskMeta}>
-          Duration: {formatDuration(item.duration)}
-        </Text>
-        <Text style={styles.taskMeta}>
-          Created: {item.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
-        </Text>
-        {item.completedAt && (
-          <Text style={styles.taskMeta}>
-            Completed: {item.completedAt.toDate().toLocaleDateString()}
+        <View style={styles.taskRow}>
+          <Text style={styles.taskLabel}>Duration:</Text>
+          <Text style={styles.taskValue}>{formatDuration(item.duration)}</Text>
+        </View>
+        
+        <View style={styles.taskRow}>
+          <Text style={styles.taskLabel}>Created:</Text>
+          <Text style={styles.taskValue}>
+            {item.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
           </Text>
+        </View>
+        
+        {item.completedAt && (
+          <View style={styles.taskRow}>
+            <Text style={styles.taskLabel}>Completed:</Text>
+            <Text style={styles.taskValue}>
+              {item.completedAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
+            </Text>
+          </View>
         )}
+        
+        <View style={styles.taskRow}>
+          <Text style={styles.taskLabel}>Created by:</Text>
+          <Text style={styles.taskValue}>{item.creatorEmail || 'Unknown User'}</Text>
+        </View>
+        
         {item.notes && (
-          <Text style={styles.taskNotes}>Notes: {item.notes}</Text>
+          <View style={styles.taskRow}>
+            <Text style={styles.taskLabel}>Notes:</Text>
+            <Text style={styles.taskValue}>{item.notes}</Text>
+          </View>
         )}
       </View>
       
@@ -271,7 +336,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   };
 
   const getTotalDuration = (): number => {
-    return tasks.reduce((total, task) => total + task.duration, 0);
+    return tasks.reduce((total, task) => total + (task.duration || 0), 0);
   };
 
   const getCompletedTasks = (): number => {
@@ -619,15 +684,30 @@ const styles = StyleSheet.create({
   taskDetails: {
     marginBottom: 16,
   },
-  taskMeta: {
+  taskRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  taskLabel: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 4,
+    fontWeight: '500',
+  },
+  taskValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
   },
   taskNotes: {
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+    marginTop: 8,
+  },
+  taskCreator: {
+    fontSize: 14,
+    color: '#999',
     marginTop: 8,
   },
   taskActions: {
