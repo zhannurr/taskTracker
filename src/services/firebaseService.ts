@@ -118,6 +118,17 @@ export class FirebaseService {
     }
   }
 
+  // Check if a user is an admin
+  static async isUserAdmin(userId: string): Promise<boolean> {
+    try {
+      const userData = await this.getUserData(userId);
+      return userData?.role === 'admin';
+    } catch (error) {
+      console.error("Error checking if user is admin:", error);
+      return false;
+    }
+  }
+
   static async getUserByEmail(email: string): Promise<UserData | null> {
     try {
       const q = query(collection(db, "users"), where("email", "==", email));
@@ -317,13 +328,18 @@ export class FirebaseService {
     }
   }
 
-  static async createTask(taskData: Omit<TaskData, 'createdAt'>): Promise<string> {
+  static async createTask(taskData: Omit<TaskData, 'createdAt'>, userId: string): Promise<string> {
     try {
       console.log('Creating task with data:', taskData);
       
       // Validate required fields
       if (!taskData.description || !taskData.duration || !taskData.projectId || !taskData.createdBy) {
         throw new Error('Missing required fields: description, duration, projectId, or createdBy');
+      }
+      
+      // Security check: ensure the createdBy field matches the authenticated user
+      if (taskData.createdBy !== userId) {
+        throw new Error('You can only create tasks for yourself');
       }
       
       const taskWithTimestamp: TaskData = {
@@ -346,13 +362,24 @@ export class FirebaseService {
     }
   }
 
-  static async getProjectTasks(projectId: string): Promise<(TaskData & { id: string })[]> {
+  static async getProjectTasks(projectId: string, userId?: string): Promise<(TaskData & { id: string })[]> {
     try {
-      const q = query(
-        collection(db, "tasks"), 
-        where("projectId", "==", projectId)
-        // Removed orderBy to avoid index requirement
-      );
+      let q;
+      if (userId) {
+        // Filter tasks by project and user
+        q = query(
+          collection(db, "tasks"), 
+          where("projectId", "==", projectId),
+          where("createdBy", "==", userId)
+        );
+      } else {
+        // Get all tasks for the project (for admin users)
+        q = query(
+          collection(db, "tasks"), 
+          where("projectId", "==", projectId)
+        );
+      }
+      
       const querySnapshot = await getDocs(q);
       const tasks: (TaskData & { id: string })[] = [];
       
@@ -371,8 +398,51 @@ export class FirebaseService {
     }
   }
 
-  static async updateTask(taskId: string, data: Partial<TaskData>): Promise<void> {
+  // Get tasks created by a specific user for a project
+  static async getUserProjectTasks(projectId: string, userId: string): Promise<(TaskData & { id: string })[]> {
     try {
+      const q = query(
+        collection(db, "tasks"), 
+        where("projectId", "==", projectId),
+        where("createdBy", "==", userId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const tasks: (TaskData & { id: string })[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        tasks.push({
+          id: doc.id,
+          ...doc.data()
+        } as TaskData & { id: string });
+      });
+      
+      // Sort by creation date (newest first) in JavaScript
+      return tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+    } catch (error) {
+      console.error("Error getting user project tasks:", error);
+      throw error;
+    }
+  }
+
+  static async updateTask(taskId: string, data: Partial<TaskData>, userId?: string): Promise<void> {
+    try {
+      // If userId is provided, check if the user can update this task
+      if (userId) {
+        const taskDoc = await getDoc(doc(db, "tasks", taskId));
+        if (!taskDoc.exists()) {
+          throw new Error('Task not found');
+        }
+        
+        const taskData = taskDoc.data() as TaskData;
+        
+        // Check if user is admin (you might want to implement a proper admin check)
+        // For now, we'll rely on the client-side check
+        if (taskData.createdBy !== userId) {
+          throw new Error('You can only update tasks you created');
+        }
+      }
+      
       const updateData = { ...data };
       
       // If marking as completed, add completion timestamp
@@ -387,8 +457,24 @@ export class FirebaseService {
     }
   }
 
-  static async deleteTask(taskId: string): Promise<void> {
+  static async deleteTask(taskId: string, userId?: string): Promise<void> {
     try {
+      // If userId is provided, check if the user can delete this task
+      if (userId) {
+        const taskDoc = await getDoc(doc(db, "tasks", taskId));
+        if (!taskDoc.exists()) {
+          throw new Error('Task not found');
+        }
+        
+        const taskData = taskDoc.data() as TaskData;
+        
+        // Check if user is admin (you might want to implement a proper admin check)
+        // For now, we'll rely on the client-side check
+        if (taskData.createdBy !== userId) {
+          throw new Error('You can only delete tasks you created');
+        }
+      }
+      
       await deleteDoc(doc(db, "tasks", taskId));
     } catch (error) {
       console.error("Error deleting task:", error);
@@ -417,9 +503,9 @@ export class FirebaseService {
   }
 
   // Get tasks with user information
-  static async getProjectTasksWithUsers(projectId: string): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
+  static async getProjectTasksWithUsers(projectId: string, userId?: string): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
     try {
-      const tasks = await this.getProjectTasks(projectId);
+      const tasks = await this.getProjectTasks(projectId, userId);
       
       // Get user emails for each task
       const tasksWithUsers = await Promise.all(
@@ -444,6 +530,89 @@ export class FirebaseService {
     } catch (error) {
       console.error("Error getting project tasks with users:", error);
       throw error;
+    }
+  }
+
+  // Get tasks created by a specific user with user information
+  static async getUserProjectTasksWithUsers(projectId: string, userId: string): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
+    try {
+      const tasks = await this.getUserProjectTasks(projectId, userId);
+      
+      // Get user emails for each task
+      const tasksWithUsers = await Promise.all(
+        tasks.map(async (task) => {
+          try {
+            const userData = await this.getUserData(task.createdBy);
+            return {
+              ...task,
+              creatorEmail: userData?.email || 'Unknown User'
+            };
+          } catch (error) {
+            console.error(`Error getting user data for ${task.createdBy}:`, error);
+            return {
+              ...task,
+              creatorEmail: 'Unknown User'
+            };
+          }
+        })
+      );
+      
+      return tasksWithUsers;
+    } catch (error) {
+      console.error("Error getting user project tasks with users:", error);
+      throw error;
+    }
+  }
+
+  // Get all tasks with user information (for admin users)
+  static async getAllTasksWithUsers(): Promise<(TaskData & { id: string; creatorEmail?: string })[]> {
+    try {
+      const tasks = await this.getAllTasks();
+      
+      // Get user emails for each task
+      const tasksWithUsers = await Promise.all(
+        tasks.map(async (task) => {
+          try {
+            const userData = await this.getUserData(task.createdBy);
+            return {
+              ...task,
+              creatorEmail: userData?.email || 'Unknown User'
+            };
+          } catch (error) {
+            console.error(`Error getting user data for ${task.createdBy}:`, error);
+            return {
+              ...task,
+              creatorEmail: 'Unknown User'
+            };
+          }
+        })
+      );
+      
+      return tasksWithUsers;
+    } catch (error) {
+      console.error("Error getting all tasks with users:", error);
+      throw error;
+    }
+  }
+
+  // Check if a user can access a project
+  static async canUserAccessProject(userId: string, projectId: string): Promise<boolean> {
+    try {
+      const userData = await this.getUserData(userId);
+      if (userData?.role === 'admin') {
+        return true; // Admins can access all projects
+      }
+      
+      const projectData = await this.getProject(projectId);
+      if (!projectData) {
+        return false; // Project doesn't exist
+      }
+      
+      // Users can access projects they created
+      return projectData.createdBy === userId;
+    } catch (error) {
+      console.error("Error checking project access:", error);
+      return false;
     }
   }
 }

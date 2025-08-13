@@ -93,23 +93,7 @@ export default function CustomDrawerContent({ navigation, state }: CustomDrawerC
               Projects
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.drawerItem,
-              state.index === 1 && styles.activeDrawerItem
-            ]}
-            onPress={() => navigation.navigate("Tasks")}
-          >
-            <Text style={styles.drawerIcon}>✅</Text>
-            <Text style={[
-              styles.drawerLabel,
-              state.index === 1 && styles.activeDrawerLabel
-            ]}>
-              All Tasks
-            </Text>
-          </TouchableOpacity>
-
+          
           <TouchableOpacity
             style={[
               styles.drawerItem,

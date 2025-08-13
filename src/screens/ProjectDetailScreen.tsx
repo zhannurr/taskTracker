@@ -84,7 +84,18 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const loadTasks = async () => {
     try {
       setLoading(true);
-      const tasksData = await FirebaseService.getProjectTasksWithUsers(projectId);
+      let tasksData: (TaskData & { id: string; creatorEmail?: string })[] = [];
+      
+      if (isAdmin) {
+        // Admin users can see all tasks
+        tasksData = await FirebaseService.getProjectTasksWithUsers(projectId);
+      } else {
+        // Regular users can only see their own tasks
+        if (currentUser?.uid) {
+          tasksData = await FirebaseService.getUserProjectTasksWithUsers(projectId, currentUser.uid);
+        }
+      }
+      
       setTasks(tasksData);
     } catch (error) {
       console.error('Error loading tasks:', error);
@@ -103,6 +114,12 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   };
 
   const handleEditTask = (task: TaskData & { id: string }) => {
+    // Security check: only allow editing if user is admin or created the task
+    if (!isAdmin && task.createdBy !== currentUser?.uid) {
+      Alert.alert('Error', 'You can only edit tasks you created');
+      return;
+    }
+    
     setEditingTask(task);
     setFormData({
       description: task.description,
@@ -145,7 +162,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
           description: formData.description.trim(),
           duration,
           notes: formData.notes.trim() || undefined
-        });
+        }, currentUser.uid);
         Alert.alert('Success', 'Task updated successfully');
       } else {
         console.log('Creating new task');
@@ -159,7 +176,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         };
         console.log('Task data to create:', taskData);
         
-        const taskId = await FirebaseService.createTask(taskData);
+        const taskId = await FirebaseService.createTask(taskData, currentUser.uid);
         console.log('Task created with ID:', taskId);
         Alert.alert('Success', 'Task created successfully');
       }
@@ -177,6 +194,19 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    // Find the task to check permissions
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      Alert.alert('Error', 'Task not found');
+      return;
+    }
+    
+    // Security check: only allow deletion if user is admin or created the task
+    if (!isAdmin && task.createdBy !== currentUser?.uid) {
+      Alert.alert('Error', 'You can only delete tasks you created');
+      return;
+    }
+    
     Alert.alert(
       'Confirm Delete',
       'Are you sure you want to delete this task?',
@@ -187,7 +217,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
           style: 'destructive',
           onPress: async () => {
             try {
-              await FirebaseService.deleteTask(taskId);
+              await FirebaseService.deleteTask(taskId, currentUser?.uid);
               Alert.alert('Success', 'Task deleted successfully');
               await loadTasks(); // Refresh the list
             } catch (error) {
@@ -201,8 +231,21 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   };
 
   const handleStatusChange = async (taskId: string, newStatus: TaskData['status']) => {
+    // Find the task to check permissions
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      Alert.alert('Error', 'Task not found');
+      return;
+    }
+    
+    // Security check: only allow status changes if user is admin or created the task
+    if (!isAdmin && task.createdBy !== currentUser?.uid) {
+      Alert.alert('Error', 'You can only change the status of tasks you created');
+      return;
+    }
+    
     try {
-      await FirebaseService.updateTask(taskId, { status: newStatus });
+      await FirebaseService.updateTask(taskId, { status: newStatus }, currentUser?.uid);
       // Update local state immediately for better UX
       setTasks(prevTasks => 
         prevTasks.map(task => 
@@ -252,7 +295,12 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         
         <View style={styles.taskRow}>
           <Text style={styles.taskLabel}>Created by:</Text>
-          <Text style={styles.taskValue}>{item.creatorEmail || 'Unknown User'}</Text>
+          <Text style={styles.taskValue}>
+            {item.createdBy === currentUser?.uid ? 'You' : (item.creatorEmail || 'Unknown User')}
+            {item.createdBy === currentUser?.uid && (
+              <Text style={styles.ownTaskIndicator}> (You created this task)</Text>
+            )}
+          </Text>
         </View>
         
         {item.notes && (
@@ -281,19 +329,24 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       </View>
       
       <View style={styles.taskActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditTask(item)}
-        >
-          <Text style={styles.actionButtonText}>Edit</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteTask(item.id)}
-        >
-          <Text style={styles.actionButtonText}>Delete</Text>
-        </TouchableOpacity>
+        {/* Only show edit/delete buttons if user is admin or created the task */}
+        {(isAdmin || item.createdBy === currentUser?.uid) && (
+          <>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.editButton]}
+              onPress={() => handleEditTask(item)}
+            >
+              <Text style={styles.actionButtonText}>Edit</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={() => handleDeleteTask(item.id)}
+            >
+              <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </View>
   );
@@ -414,6 +467,18 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
               <Text style={styles.addButtonText}>+ Add Task</Text>
             </TouchableOpacity>
           </View>
+          
+          {!isAdmin && (
+            <Text style={styles.tasksInfoText}>
+              You can only see and manage tasks you created
+            </Text>
+          )}
+          
+          {isAdmin && (
+            <Text style={styles.tasksInfoText}>
+              Admin view: You can see and manage all tasks
+            </Text>
+          )}
 
           {loading ? (
             <ActivityIndicator size="large" color="#007AFF" style={styles.loadingIndicator} />
@@ -802,5 +867,18 @@ const styles = StyleSheet.create({
   statusPicker: {
     height: 40,
     width: '100%',
+  },
+  ownTaskIndicator: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  tasksInfoText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 10,
+    marginBottom: 15,
+    textAlign: 'center',
   },
 });
