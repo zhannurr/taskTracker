@@ -34,68 +34,75 @@ export default function ProfileScreen({ navigation }: any) {
     }
   };
 
-
-
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account Information</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.label}>Email:</Text>
-          <Text style={styles.value}>{currentUser?.email}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.label}>User ID:</Text>
-          <Text style={styles.value}>{currentUser?.uid}</Text>
-        </View>
-        {userData && (
-          <>
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Created:</Text>
-              <Text style={styles.value}>
-                {userData.createdAt?.toDate?.()?.toLocaleDateString() || "N/A"}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Last Login:</Text>
-              <Text style={styles.value}>
-                {userData.lastLogin?.toDate?.()?.toLocaleDateString() || "N/A"}
-              </Text>
-            </View>
-            {userData.role && (
-              <View style={styles.infoRow}>
-                <Text style={styles.label}>Role:</Text>
-                <Text style={[styles.value, styles.roleText]}>{userData.role}</Text>
-              </View>
-            )}
-          </>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Actions</Text>
-        
-        {userData?.role === "admin" && (
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate("Admin")}
-          >
-            <Text style={styles.buttonText}>Admin Panel</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[styles.button, styles.logoutButton]}
-          onPress={handleLogout}
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => navigation.openDrawer()}
         >
-          <Text style={styles.buttonText}>Logout</Text>
+          <Text style={styles.menuIcon}>☰</Text>
         </TouchableOpacity>
+        <Text style={styles.title}>Profile</Text>
+        <View style={styles.headerSpacer} />
       </View>
-    </ScrollView>
+
+      <ScrollView style={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account Information</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Email:</Text>
+            <Text style={styles.value}>{currentUser?.email}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>User ID:</Text>
+            <Text style={styles.value}>{currentUser?.uid}</Text>
+          </View>
+          {userData && (
+            <>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Created:</Text>
+                <Text style={styles.value}>
+                  {userData.createdAt?.toDate?.()?.toLocaleDateString() || "N/A"}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.label}>Last Login:</Text>
+                <Text style={styles.value}>
+                  {userData.lastLogin?.toDate?.()?.toLocaleDateString() || "N/A"}
+                </Text>
+              </View>
+              {userData.role && (
+                <View style={styles.infoRow}>
+                  <Text style={styles.label}>Role:</Text>
+                  <Text style={[styles.value, styles.roleText]}>{userData.role}</Text>
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Actions</Text>
+          
+          {userData?.role === "admin" && (
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => navigation.navigate("Admin")}
+            >
+              <Text style={styles.buttonText}>Admin Panel</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.button, styles.logoutButton]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.buttonText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -105,14 +112,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   header: {
-    backgroundColor: "#007AFF",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
-    alignItems: "center",
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingTop: 50, // Add top padding for status bar
+  },
+  menuButton: {
+    padding: 8,
+  },
+  menuIcon: {
+    fontSize: 24,
+    color: '#007AFF',
   },
   title: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "white",
+    fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40, // Same width as menu button for centering
+  },
+  content: {
+    flex: 1,
   },
   section: {
     backgroundColor: "white",

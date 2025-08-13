@@ -38,24 +38,12 @@ export default function CustomDrawerContent({ navigation, state }: CustomDrawerC
   };
 
   const handleLogout = async () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await logout();
-            } catch (error) {
-              console.error("Logout error:", error);
-            }
-          },
-        },
-      ]
-    );
+    try {
+      await logout();
+      navigation.navigate("Login");
+    } catch (error) {
+      Alert.alert("Error", "Failed to logout");
+    }
   };
 
   const isAdmin = userData?.role === 'admin';
@@ -238,3 +226,4 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
   },
 });
+
