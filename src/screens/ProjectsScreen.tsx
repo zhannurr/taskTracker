@@ -17,7 +17,6 @@ import { FirebaseService, UserData } from "../services/firebaseService";
 interface Project {
   id: string;
   title: string;
-  description: string;
   status: 'active' | 'completed' | 'pending';
   createdAt: any;
   createdBy: string;
@@ -31,7 +30,6 @@ export default function ProjectsScreen({ navigation }: any) {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [formData, setFormData] = useState({
     title: '',
-    description: '',
     status: 'active' as 'active' | 'completed' | 'pending'
   });
 
@@ -54,7 +52,7 @@ export default function ProjectsScreen({ navigation }: any) {
 
   const handleCreateProject = () => {
     setEditingProject(null);
-    setFormData({ title: '', description: '', status: 'active' });
+    setFormData({ title: '', status: 'active' });
     setModalVisible(true);
   };
 
@@ -62,14 +60,13 @@ export default function ProjectsScreen({ navigation }: any) {
     setEditingProject(project);
     setFormData({
       title: project.title,
-      description: project.description,
       status: project.status
     });
     setModalVisible(true);
   };
 
   const handleSaveProject = async () => {
-    if (!formData.title.trim() || !formData.description.trim()) {
+    if (!formData.title.trim()) {
       Alert.alert('Error', 'Please fill all fields');
       return;
     }
@@ -134,7 +131,7 @@ export default function ProjectsScreen({ navigation }: any) {
           <Text style={styles.statusText}>{item.status}</Text>
         </View>
       </View>
-      <Text style={styles.projectDescription}>{item.description}</Text>
+  
       <Text style={styles.projectMeta}>
         Created: {item.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
       </Text>
@@ -246,14 +243,7 @@ export default function ProjectsScreen({ navigation }: any) {
               onChangeText={(text) => setFormData({ ...formData, title: text })}
             />
             
-            <TextInput
-              style={styles.input}
-              placeholder="Project Description"
-              value={formData.description}
-              onChangeText={(text) => setFormData({ ...formData, description: text })}
-              multiline
-              numberOfLines={3}
-            />
+    
 
             <View style={styles.buttonRow}>
               <Button 
@@ -363,12 +353,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
   },
-  projectDescription: {
-    fontSize: 16,
-    color: '#333',
-    marginBottom: 12,
-    lineHeight: 22,
-  },
+ 
   projectMeta: {
     fontSize: 14,
     color: '#666',

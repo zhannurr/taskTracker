@@ -11,7 +11,7 @@ interface AuthContextType {
 
 
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, username: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -116,9 +116,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const register = async (email: string, password: string, username: string) => {
     try {
-      await FirebaseService.registerUser(email, password);
+      await FirebaseService.registerUser(email, password, username);
       // User data will be loaded automatically by the auth state change listener
     } catch (error) {
       console.error('Registration error:', error);

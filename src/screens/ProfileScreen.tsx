@@ -55,8 +55,8 @@ export default function ProfileScreen({ navigation }: any) {
             <Text style={styles.value}>{currentUser?.email}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.label}>User ID:</Text>
-            <Text style={styles.value}>{currentUser?.uid}</Text>
+            <Text style={styles.label}>Username:</Text>
+            <Text style={styles.value}>{userData?.username}</Text>
           </View>
           {userData && (
             <>

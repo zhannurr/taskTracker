@@ -33,19 +33,23 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
   const [formData, setFormData] = useState({
     description: '',
     duration: '',
-    notes: ''
   });
+  const [availableUsers, setAvailableUsers] = useState<UserData[]>([]); // New state for available users
 
   useEffect(() => {
     if (projectId) {
       loadProject();
       loadTasks();
+      // Load available users if admin
+      if (isAdmin) {
+        loadAvailableUsers();
+      }
       // Initialize tasks collection to ensure it exists
       FirebaseService.initializeTasksCollection().catch(error => {
         console.log('Error initializing tasks collection:', error);
       });
     }
-  }, [projectId, currentUser]);
+  }, [projectId, currentUser, isAdmin]);
 
   // Refresh tasks when screen comes into focus
   useFocusEffect(
@@ -116,9 +120,21 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
     }
   };
 
+  const loadAvailableUsers = async () => {
+    try {
+      const users = await FirebaseService.getAllUsers();
+      setAvailableUsers(users);
+    } catch (error) {
+      console.error('Error loading available users:', error);
+    }
+  };
+
   const handleAddTask = () => {
     setEditingTask(null);
-    setFormData({ description: '', duration: '', notes: '' });
+    setFormData({ 
+      description: '', 
+      duration: '',
+    });
     setModalVisible(true);
   };
 
@@ -133,7 +149,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
     setFormData({
       description: task.description,
       duration: task.duration.toString(),
-      notes: task.notes || ''
+
     });
     setModalVisible(true);
   };
@@ -170,18 +186,23 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         await FirebaseService.updateTask(editingTask.id, {
           description: formData.description.trim(),
           duration,
-          notes: formData.notes.trim() || undefined
         }, currentUser.uid);
         Alert.alert('Success', 'Task updated successfully');
       } else {
         console.log('Creating new task');
+        
+        // Determine who the task is actually created by
+        let actualCreatedBy = currentUser.uid;
+     
+    
+        
         const taskData = {
           description: formData.description.trim(),
           duration,
-          notes: formData.notes.trim() || undefined,
           status: 'pending' as const,
           projectId,
-          createdBy: currentUser.uid
+          createdBy: actualCreatedBy,
+      
         };
         console.log('Task data to create:', taskData);
         
@@ -192,7 +213,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       
       setModalVisible(false);
       // Clear form data
-      setFormData({ description: '', duration: '', notes: '' });
+      setFormData({ description: '', duration: '' });
       // Refresh tasks list
       await loadTasks();
     } catch (error) {
@@ -271,7 +292,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
     }
   };
 
-  const renderTaskItem = ({ item }: { item: TaskData & { id: string; creatorEmail?: string } }) => (
+  const renderTaskItem = ({ item }: { item: TaskData & { id: string; creatorEmail?: string; creatorUsername?: string } }) => (
     <View style={styles.taskCard}>
       <View style={styles.taskHeader}>
         <Text style={styles.taskDescription}>{item.description}</Text>
@@ -303,21 +324,14 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         )}
         
         <View style={styles.taskRow}>
-          <Text style={styles.taskLabel}>Created by:</Text>
+          <Text style={styles.taskLabel}>Assigned to:</Text>
           <Text style={styles.taskValue}>
-            {item.createdBy === currentUser?.uid ? 'You' : (item.creatorEmail || 'Unknown User')}
-            {item.createdBy === currentUser?.uid && (
-              <Text style={styles.ownTaskIndicator}> (You created this task)</Text>
+            {item.createdBy === currentUser?.uid ? 'You' : (item.creatorUsername || 'Unknown User')}
+            {item.assignedBy && item.assignedBy !== item.createdBy && (
+              <Text style={styles.adminAssignmentIndicator}> (Assigned by Admin)</Text>
             )}
           </Text>
         </View>
-        
-        {item.notes && (
-          <View style={styles.taskRow}>
-            <Text style={styles.taskLabel}>Notes:</Text>
-            <Text style={styles.taskValue}>{item.notes}</Text>
-          </View>
-        )}
         
         {/* Status Picker Row */}
         <View style={styles.taskRow}>
@@ -437,7 +451,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
         {/* Project Info */}
         <View style={styles.projectCard}>
           <Text style={styles.projectTitle}>{project.title}</Text>
-          <Text style={styles.projectDescription}>{project.description}</Text>
+  
           <View style={styles.projectMeta}>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(project.status) }]}>
               <Text style={styles.statusText}>{project.status}</Text>
@@ -481,10 +495,10 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
           
           {!isAdmin && (
             <Text style={styles.tasksInfoText}>
-              You can only see and manage tasks you created
+              You can only see and manage your own tasks
             </Text>
           )}
-          
+            
           {isAdmin && (
             <Text style={styles.tasksInfoText}>
               Admin view: You can see and manage all tasks
@@ -539,14 +553,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
               keyboardType="numeric"
             />
             
-            <TextInput
-              style={styles.input}
-              placeholder="Notes (optional)"
-              value={formData.notes}
-              onChangeText={(text) => setFormData({ ...formData, notes: text })}
-              multiline
-              numberOfLines={3}
-            />
+        
 
             <View style={styles.modalButtons}>
               <TouchableOpacity 
@@ -779,12 +786,7 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '600',
   },
-  taskNotes: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
-    marginTop: 8,
-  },
+ 
   taskCreator: {
     fontSize: 14,
     color: '#999',
@@ -904,5 +906,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  pickerContainer: {
+    marginBottom: 16,
+  },
+  pickerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    marginBottom: 8,
+  },
+  userPicker: {
+    height: 50,
+    width: '100%',
+  },
+  pickerHelpText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  adminAssignmentIndicator: {
+    fontSize: 12,
+    color: '#FF9500',
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
 });

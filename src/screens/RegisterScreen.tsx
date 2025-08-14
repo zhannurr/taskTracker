@@ -7,7 +7,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
+  const [username, setUsername] = useState("");
   const handleRegister = async () => {
     if (!email || !password) {
       Alert.alert("Error", "Please fill all fields");
@@ -16,7 +16,7 @@ export default function RegisterScreen({ navigation }: any) {
 
     setLoading(true);
     try {
-      await register(email, password);
+      await register(email, password, username);
       Alert.alert("Success", "Registration complete");
       navigation.navigate("Login");
     } catch (error) {
@@ -36,6 +36,14 @@ export default function RegisterScreen({ navigation }: any) {
         value={email}
         autoCapitalize="none"
         keyboardType="email-address"
+      />
+       <TextInput
+        style={styles.input}
+        placeholder="Username"
+        onChangeText={setUsername}
+        value={username}
+        autoCapitalize="none"
+        keyboardType="default"
       />
       <TextInput
         style={styles.input}

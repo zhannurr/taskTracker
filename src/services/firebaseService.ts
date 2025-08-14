@@ -28,11 +28,11 @@ export interface UserData {
   role?: string;
   createdAt: Timestamp;
   lastLogin?: Timestamp;
+  username: string;
 }
 
 export interface ProjectData {
   title: string;
-  description: string;
   status: 'active' | 'completed' | 'pending';
   createdBy: string;
   createdAt: Timestamp;
@@ -47,12 +47,13 @@ export interface TaskData {
   createdBy: string;
   createdAt: Timestamp;
   completedAt?: Timestamp;
-  notes?: string;
+  assignedTo?: string; // New field: who the task is assigned to
+  assignedBy?: string; // New field: who assigned the task (admin)
 }
 
 export class FirebaseService {
   // User Authentication
-  static async registerUser(email: string, password: string): Promise<UserCredential> {
+  static async registerUser(email: string, password: string, username: string): Promise<UserCredential> {
     try {
       console.log('=== Starting user registration ===');
       console.log('Email:', email);
@@ -68,9 +69,10 @@ export class FirebaseService {
       // Store additional user data in Firestore
       const userData: UserData = {
         email,
-        password, // Note: In production, you might want to store additional user info instead of password
-        role: isFirstUser ? "admin" : "user", // First user becomes admin
-        createdAt: Timestamp.fromDate(new Date())
+        password,
+        role: isFirstUser ? "admin" : "user", 
+        createdAt: Timestamp.fromDate(new Date()),
+        username: username
       };
       
       console.log('User data to store:', userData);
@@ -320,38 +322,6 @@ export class FirebaseService {
       console.log('Tasks collection already exists');
     } catch (error) {
       console.log('Tasks collection might not exist, creating sample task...');
-      
-      // Create a sample task to initialize the collection
-      const tasksCollection = collection(db, "tasks");
-      const sampleTask: TaskData = {
-        description: "Sample Task",
-        duration: 30,
-        status: 'pending',
-        projectId: "sample-project",
-        createdBy: "system",
-        createdAt: Timestamp.fromDate(new Date()),
-        notes: "This is a sample task to initialize the collection"
-      };
-      
-      try {
-        await addDoc(tasksCollection, sampleTask);
-        console.log('Tasks collection initialized with sample task');
-        
-        // Delete the sample task after a short delay
-        setTimeout(async () => {
-          try {
-            const querySnapshot = await getDocs(query(tasksCollection, where("description", "==", "Sample Task")));
-            querySnapshot.forEach(async (doc) => {
-              await deleteDoc(doc.ref);
-            });
-            console.log('Sample task cleaned up');
-          } catch (cleanupError) {
-            console.log('Error cleaning up sample task:', cleanupError);
-          }
-        }, 5000);
-      } catch (initError) {
-        console.error('Error initializing tasks collection:', initError);
-      }
     }
   }
 
@@ -389,19 +359,57 @@ export class FirebaseService {
     }
   }
 
+  // Update the getProjectTasks method to handle assigned tasks
   static async getProjectTasks(projectId: string, userId?: string): Promise<(TaskData & { id: string })[]> {
     try {
       console.log('getProjectTasks called with projectId:', projectId, 'userId:', userId);
       
       let q;
       if (userId) {
-        // Filter tasks by project and user
+        // Filter tasks by project and user (either created by or assigned to)
         console.log('Filtering tasks by project and user');
         q = query(
           collection(db, "tasks"), 
           where("projectId", "==", projectId),
           where("createdBy", "==", userId)
         );
+        
+        // Also get tasks assigned to this user by admin
+        const assignedTasksQuery = query(
+          collection(db, "tasks"), 
+          where("projectId", "==", projectId),
+          where("assignedTo", "==", userId)
+        );
+        
+        const [userTasksSnapshot, assignedTasksSnapshot] = await Promise.all([
+          getDocs(q),
+          getDocs(assignedTasksQuery)
+        ]);
+        
+        const tasks: (TaskData & { id: string })[] = [];
+        
+        // Add tasks created by user
+        userTasksSnapshot.forEach((doc) => {
+          tasks.push({
+            id: doc.id,
+            ...doc.data()
+          } as TaskData & { id: string });
+        });
+        
+        // Add tasks assigned to user by admin
+        assignedTasksSnapshot.forEach((doc) => {
+          const taskData = doc.data() as TaskData;
+          // Only add if not already in the list (avoid duplicates)
+          if (!tasks.find(t => t.id === doc.id)) {
+            tasks.push({
+              id: doc.id,
+              ...taskData
+            } as TaskData & { id: string });
+          }
+        });
+        
+        // Sort by creation date (newest first)
+        return tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
       } else {
         // Get all tasks for the project (for admin users)
         console.log('Getting all tasks for project (admin view)');
@@ -409,27 +417,27 @@ export class FirebaseService {
           collection(db, "tasks"), 
           where("projectId", "==", projectId)
         );
+        
+        console.log('Executing query...');
+        const querySnapshot = await getDocs(q);
+        console.log('Query result:', querySnapshot.size, 'documents');
+        
+        const tasks: (TaskData & { id: string })[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const taskData = doc.data();
+          console.log('Task data:', doc.id, taskData);
+          tasks.push({
+            id: doc.id,
+            ...taskData
+          } as TaskData & { id: string });
+        });
+        
+        // Sort by creation date (newest first) in JavaScript
+        const sortedTasks = tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+        console.log('Returning sorted tasks:', sortedTasks.length);
+        return sortedTasks;
       }
-      
-      console.log('Executing query...');
-      const querySnapshot = await getDocs(q);
-      console.log('Query result:', querySnapshot.size, 'documents');
-      
-      const tasks: (TaskData & { id: string })[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const taskData = doc.data();
-        console.log('Task data:', doc.id, taskData);
-        tasks.push({
-          id: doc.id,
-          ...taskData
-        } as TaskData & { id: string });
-      });
-      
-      // Sort by creation date (newest first) in JavaScript
-      const sortedTasks = tasks.sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
-      console.log('Returning sorted tasks:', sortedTasks.length);
-      return sortedTasks;
     } catch (error) {
       console.error("Error getting project tasks:", error);
       throw error;
@@ -556,7 +564,7 @@ export class FirebaseService {
             console.log('User data for task creator:', task.createdBy, ':', userData?.email);
             return {
               ...task,
-              creatorEmail: userData?.email || 'Unknown User'
+              creatorUsername: userData?.username || 'Unknown User'
             };
           } catch (error) {
             console.error(`Error getting user data for ${task.createdBy}:`, error);
