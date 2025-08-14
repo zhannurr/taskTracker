@@ -687,41 +687,6 @@ export class FirebaseService {
     }
   }
 
-  // Debug method to check user document directly
-  static async debugUserDocument(userId: string): Promise<void> {
-    try {
-      console.log('=== Debugging user document ===');
-      console.log('User ID:', userId);
-      
-      const userDocRef = doc(db, "users", userId);
-      console.log('User document reference:', userDocRef.path);
-      
-      const userDoc = await getDoc(userDocRef);
-      console.log('Document exists:', userDoc.exists());
-      
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        console.log('Document data:', data);
-        console.log('Document ID:', userDoc.id);
-        console.log('User role:', data.role);
-        console.log('User email:', data.email);
-        console.log('Created at:', data.createdAt);
-      } else {
-        console.log('Document does not exist');
-        
-        // Check if the users collection exists
-        const usersCollection = collection(db, "users");
-        const usersQuery = query(usersCollection, limit(5));
-        const usersSnapshot = await getDocs(usersQuery);
-        console.log('Users collection has documents:', usersSnapshot.size);
-        
-        usersSnapshot.forEach((doc) => {
-          console.log('User doc:', doc.id, doc.data());
-        });
-      }
-    } catch (error) {
-      console.error('Error debugging user document:', error);
-    }
-  }
+
 }
 

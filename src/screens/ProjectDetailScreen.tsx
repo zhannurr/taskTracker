@@ -22,7 +22,7 @@ interface ProjectDetailScreenProps {
 }
 
 export default function ProjectDetailScreen({ route, navigation }: ProjectDetailScreenProps) {
-  const { currentUser, userData, isAdmin, refreshUserData, forceRefreshUserData } = useAuth();
+  const { currentUser, userData, isAdmin, refreshUserData } = useAuth();
   const { projectId } = route.params;
   
   const [project, setProject] = useState<(ProjectData & { id: string }) | null>(null);
@@ -432,45 +432,7 @@ export default function ProjectDetailScreen({ route, navigation }: ProjectDetail
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Debug Information */}
-        <View style={styles.debugCard}>
-          <Text style={styles.debugTitle}>Debug Info</Text>
-          <Text style={styles.debugText}>User ID: {currentUser?.uid || 'None'}</Text>
-          <Text style={styles.debugText}>User Role: {userData?.role || 'None'}</Text>
-          <Text style={styles.debugText}>Is Admin: {isAdmin ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Project ID: {projectId}</Text>
-          <Text style={styles.debugText}>Tasks Count: {tasks.length}</Text>
-          
-          <TouchableOpacity 
-            style={styles.testButton}
-            onPress={() => {
-              FirebaseService.testTasksCollectionAccess();
-            }}
-          >
-            <Text style={styles.testButtonText}>Test Tasks Access</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.testButton, { backgroundColor: '#FF9500', marginTop: 10 }]}
-            onPress={async () => {
-              console.log('Manual refresh of user data...');
-              await refreshUserData();
-            }}
-          >
-            <Text style={styles.testButtonText}>Refresh User Data</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.testButton, { backgroundColor: '#FF3B30', marginTop: 10 }]}
-            onPress={() => {
-              if (currentUser?.uid) {
-                FirebaseService.debugUserDocument(currentUser.uid);
-              }
-            }}
-          >
-            <Text style={styles.testButtonText}>Debug User Document</Text>
-          </TouchableOpacity>
-        </View>
+
 
         {/* Project Info */}
         <View style={styles.projectCard}>
@@ -652,28 +614,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
-  },
-  debugCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  debugTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-  },
-  debugText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 8,
   },
   projectCard: {
     backgroundColor: '#fff',

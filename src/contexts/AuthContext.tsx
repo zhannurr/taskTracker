@@ -8,7 +8,7 @@ interface AuthContextType {
   userData: UserData | null;
   isAdmin: boolean;
   refreshUserData: () => Promise<void>;
-  forceRefreshUserData: () => Promise<void>;
+
 
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
@@ -67,15 +67,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [currentUser]);
 
-  // Force refresh user data (useful for debugging)
-  const forceRefreshUserData = useCallback(async () => {
-    console.log('=== forceRefreshUserData called ===');
-    if (currentUser) {
-      await refreshUserData();
-    } else {
-      console.log('No current user to refresh');
-    }
-  }, [currentUser, refreshUserData]);
+ 
 
   // Check initial auth state immediately
   useEffect(() => {
@@ -149,7 +141,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userData,
     isAdmin,
     refreshUserData,
-    forceRefreshUserData,
     login,
     register,
     logout
