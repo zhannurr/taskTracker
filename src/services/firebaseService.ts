@@ -359,6 +359,53 @@ export class FirebaseService {
     }
   }
 
+  // Create task assigned to a specific user (admin only)
+  static async createAssignedTask(taskData: Omit<TaskData, 'createdAt' | 'createdBy'>, adminUserId: string, assignedToUserId: string): Promise<string> {
+    try {
+      console.log('Creating assigned task with data:', taskData);
+      console.log('Admin user ID:', adminUserId);
+      console.log('Assigned to user ID:', assignedToUserId);
+      
+      // Validate required fields
+      if (!taskData.description || !taskData.duration || !taskData.projectId) {
+        throw new Error('Missing required fields: description, duration, or projectId');
+      }
+      
+      // Check if the user creating the task is an admin
+      const adminUserData = await this.getUserData(adminUserId);
+      if (!adminUserData || adminUserData.role !== 'admin') {
+        throw new Error('Only admins can assign tasks to users');
+      }
+      
+      // Check if the assigned user exists
+      const assignedUserData = await this.getUserData(assignedToUserId);
+      if (!assignedUserData) {
+        throw new Error('Assigned user not found');
+      }
+      
+      const taskWithTimestamp: TaskData = {
+        ...taskData,
+        createdBy: assignedToUserId, // The user the task is assigned to
+        assignedTo: assignedToUserId, // The user the task is assigned to
+        assignedBy: adminUserId, // The admin who assigned the task
+        createdAt: Timestamp.fromDate(new Date())
+      };
+      
+      console.log('Assigned task with timestamp:', taskWithTimestamp);
+      
+      // Create the tasks collection if it doesn't exist
+      const tasksCollection = collection(db, "tasks");
+      const docRef = await addDoc(tasksCollection, taskWithTimestamp);
+      
+      console.log('Assigned task created successfully with ID:', docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error("Error creating assigned task:", error);
+      console.error("Task data that failed:", taskData);
+      throw error;
+    }
+  }
+
   // Update the getProjectTasks method to handle assigned tasks
   static async getProjectTasks(projectId: string, userId?: string): Promise<(TaskData & { id: string })[]> {
     try {
@@ -447,20 +494,45 @@ export class FirebaseService {
   // Get tasks created by a specific user for a project
   static async getUserProjectTasks(projectId: string, userId: string): Promise<(TaskData & { id: string })[]> {
     try {
-      const q = query(
+      // Get tasks created by the user
+      const createdTasksQuery = query(
         collection(db, "tasks"), 
         where("projectId", "==", projectId),
         where("createdBy", "==", userId)
       );
       
-      const querySnapshot = await getDocs(q);
+      // Get tasks assigned to the user by admin
+      const assignedTasksQuery = query(
+        collection(db, "tasks"), 
+        where("projectId", "==", projectId),
+        where("assignedTo", "==", userId)
+      );
+      
+      const [createdTasksSnapshot, assignedTasksSnapshot] = await Promise.all([
+        getDocs(createdTasksQuery),
+        getDocs(assignedTasksQuery)
+      ]);
+      
       const tasks: (TaskData & { id: string })[] = [];
       
-      querySnapshot.forEach((doc) => {
+      // Add tasks created by user
+      createdTasksSnapshot.forEach((doc) => {
         tasks.push({
           id: doc.id,
           ...doc.data()
         } as TaskData & { id: string });
+      });
+      
+      // Add tasks assigned to user by admin (avoid duplicates)
+      assignedTasksSnapshot.forEach((doc) => {
+        const taskData = doc.data() as TaskData;
+        // Only add if not already in the list (avoid duplicates)
+        if (!tasks.find(t => t.id === doc.id)) {
+          tasks.push({
+            id: doc.id,
+            ...taskData
+          } as TaskData & { id: string });
+        }
       });
       
       // Sort by creation date (newest first) in JavaScript
@@ -499,6 +571,45 @@ export class FirebaseService {
       await updateDoc(doc(db, "tasks", taskId), updateData);
     } catch (error) {
       console.error("Error updating task:", error);
+      throw error;
+    }
+  }
+
+  // Update task with assignment (admin only)
+  static async updateTaskAssignment(taskId: string, assignedToUserId: string, adminUserId: string): Promise<void> {
+    try {
+      console.log('Updating task assignment:', taskId, 'to user:', assignedToUserId);
+      
+      // Check if the user updating the task is an admin
+      const adminUserData = await this.getUserData(adminUserId);
+      if (!adminUserData || adminUserData.role !== 'admin') {
+        throw new Error('Only admins can reassign tasks');
+      }
+      
+      // Check if the assigned user exists
+      const assignedUserData = await this.getUserData(assignedToUserId);
+      if (!assignedUserData) {
+        throw new Error('Assigned user not found');
+      }
+      
+      // Get the current task to preserve other fields
+      const taskDoc = await getDoc(doc(db, "tasks", taskId));
+      if (!taskDoc.exists()) {
+        throw new Error('Task not found');
+      }
+      
+      const currentTask = taskDoc.data() as TaskData;
+      
+      // Update the task with new assignment
+      await updateDoc(doc(db, "tasks", taskId), {
+        assignedTo: assignedToUserId,
+        assignedBy: adminUserId,
+        createdBy: assignedToUserId // Update createdBy to reflect the assigned user
+      });
+      
+      console.log('Task assignment updated successfully');
+    } catch (error) {
+      console.error("Error updating task assignment:", error);
       throw error;
     }
   }

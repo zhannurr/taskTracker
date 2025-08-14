@@ -3,7 +3,7 @@ import { createDrawerNavigator } from "@react-navigation/drawer";
 import { Text } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
 import ProjectsScreen from "../screens/ProjectsScreen";
-import TasksScreen from "../screens/TasksScreen";
+
 import ProfileScreen from "../screens/ProfileScreen";
 import AdminScreen from "../screens/AdminScreen";
 import CustomDrawerContent from "./CustomDrawerContent";
